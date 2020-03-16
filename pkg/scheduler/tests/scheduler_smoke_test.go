@@ -166,7 +166,7 @@ partitions:
       - name: root
         submitacl: "*"
         queues:
-          - name: a
+          - name: singleleaf
             resources:
               guaranteed:
                 memory: 100
@@ -180,21 +180,21 @@ partitions:
 	defer ms.Stop()
 
 	err := ms.Init(configData, false)
-	if err != nil {
-		t.Fatalf("RegisterResourceManager failed: %v", err)
-	}
+	assert.NilError(t, err, "RegisterResourceManager failed")
 
+	leafName := "root.singleleaf"
+	appID := "app-1"
 	// Check queues of cache and scheduler.
 	partitionInfo := ms.clusterInfo.GetPartition("[rm:123]default")
-	assert.Assert(t, nil == partitionInfo.Root.GetMaxResource(), "partition info max resource nil")
+	assert.Assert(t, partitionInfo.Root.GetMaxResource() == nil, "partition info max resource nil")
 
 	// Check scheduling queue root
-	schedulerQueueRoot := ms.getSchedulingQueue("root")
-	assert.Assert(t, nil == schedulerQueueRoot.QueueInfo.GetMaxResource())
+	root := ms.getSchedulingQueue("root")
+	assert.Assert(t, root.QueueInfo.GetMaxResource() == nil, "root queue max resource should be nil")
 
-	// Check scheduling queue a
-	schedulerQueueA := ms.getSchedulingQueue("root.a")
-	assert.Assert(t, 150 == schedulerQueueA.QueueInfo.GetMaxResource().Resources[resources.MEMORY])
+	// Check scheduling queue singleleaf
+	leaf := ms.getSchedulingQueue(leafName)
+	assert.Assert(t, leaf.QueueInfo.GetMaxResource().Resources[resources.MEMORY] == 150, "%s config not set correct", leafName)
 
 	// Register a node, and add apps
 	err = ms.proxy.Update(&si.UpdateRequest{
@@ -226,27 +226,23 @@ partitions:
 				},
 			},
 		},
-		NewApplications: newAddAppRequest(map[string]string{"app-1": "root.a"}),
+		NewApplications: newAddAppRequest(map[string]string{appID: leafName}),
 		RmID:            "rm:123",
 	})
+	assert.NilError(t, err, "UpdateRequest failed")
 
-	if err != nil {
-		t.Fatalf("UpdateRequest failed: %v", err)
-	}
-
-	ms.mockRM.waitForAcceptedApplication(t, "app-1", 1000)
+	ms.mockRM.waitForAcceptedApplication(t, appID, 1000)
 	ms.mockRM.waitForAcceptedNode(t, "node-1:1234", 1000)
 	ms.mockRM.waitForAcceptedNode(t, "node-2:1234", 1000)
 
 	// Get scheduling app
-	schedulingApp := ms.getSchedulingApplication("app-1")
+	schedulingApp := ms.getSchedulingApplication(appID)
 
 	// Verify app initial state
 	var app01 *cache.ApplicationInfo
-	app01, err = getApplicationInfoFromPartition(partitionInfo, "app-1")
-	if err != nil {
-		t.Fatalf("application not found: %v", err)
-	}
+	app01, err = getApplicationInfoFromPartition(partitionInfo, appID)
+	assert.NilError(t, err, "application not found")
+
 	assert.Equal(t, app01.GetApplicationState(), cache.Accepted.String())
 
 	err = ms.proxy.Update(&si.UpdateRequest{
@@ -260,20 +256,17 @@ partitions:
 					},
 				},
 				MaxAllocations: 2,
-				ApplicationID:  "app-1",
+				ApplicationID:  appID,
 			},
 		},
 		RmID: "rm:123",
 	})
-
-	if err != nil {
-		t.Fatalf("UpdateRequest 2 failed: %v", err)
-	}
+	assert.NilError(t, err, "UpdateRequest 2 failed")
 
 	// Wait pending resource of queue a and scheduler queue
 	// Both pending memory = 10 * 2 = 20;
-	waitForPendingQueueResource(t, schedulerQueueA, 20, 1000)
-	waitForPendingQueueResource(t, schedulerQueueRoot, 20, 1000)
+	waitForPendingQueueResource(t, leaf, 20, 1000)
+	waitForPendingQueueResource(t, root, 20, 1000)
 	waitForPendingAppResource(t, schedulingApp, 20, 1000)
 
 	ms.scheduler.MultiStepSchedule(16)
@@ -281,14 +274,14 @@ partitions:
 	ms.mockRM.waitForAllocations(t, 2, 1000)
 
 	// Make sure pending resource updated to 0
-	waitForPendingQueueResource(t, schedulerQueueA, 0, 1000)
-	waitForPendingQueueResource(t, schedulerQueueRoot, 0, 1000)
+	waitForPendingQueueResource(t, leaf, 0, 1000)
+	waitForPendingQueueResource(t, root, 0, 1000)
 	waitForPendingAppResource(t, schedulingApp, 0, 1000)
 
 	// Check allocated resources of queues, apps
-	assert.Assert(t, schedulerQueueA.QueueInfo.GetAllocatedResource().Resources[resources.MEMORY] == 20)
-	assert.Assert(t, schedulerQueueRoot.QueueInfo.GetAllocatedResource().Resources[resources.MEMORY] == 20)
-	assert.Assert(t, schedulingApp.ApplicationInfo.GetAllocatedResource().Resources[resources.MEMORY] == 20)
+	assert.Assert(t, leaf.QueueInfo.GetAllocatedResource().Resources[resources.MEMORY] == 20, "leaf allocated memory incorrect")
+	assert.Assert(t, root.QueueInfo.GetAllocatedResource().Resources[resources.MEMORY] == 20, "root allocated memory incorrect")
+	assert.Assert(t, schedulingApp.ApplicationInfo.GetAllocatedResource().Resources[resources.MEMORY] == 20, "app allocated memory incorrect")
 
 	// once we start to process allocation asks from this app, verify the state again
 	assert.Equal(t, app01.GetApplicationState(), cache.Running.String())
@@ -308,7 +301,7 @@ partitions:
 					},
 				},
 				MaxAllocations: 2,
-				ApplicationID:  "app-1",
+				ApplicationID:  appID,
 			},
 			{
 				AllocationKey: "alloc-3",
@@ -319,20 +312,17 @@ partitions:
 					},
 				},
 				MaxAllocations: 2,
-				ApplicationID:  "app-1",
+				ApplicationID:  appID,
 			},
 		},
 		RmID: "rm:123",
 	})
-
-	if err != nil {
-		t.Fatalf("UpdateRequest 3 failed: %v", err)
-	}
+	assert.NilError(t, err, "UpdateRequest 3 failed")
 
 	// Wait pending resource of queue a and scheduler queue
 	// Both pending memory = 50 * 2 + 100 * 2 = 300;
-	waitForPendingQueueResource(t, schedulerQueueA, 300, 1000)
-	waitForPendingQueueResource(t, schedulerQueueRoot, 300, 1000)
+	waitForPendingQueueResource(t, leaf, 300, 1000)
+	waitForPendingQueueResource(t, root, 300, 1000)
 	waitForPendingAppResource(t, schedulingApp, 300, 1000)
 
 	// Now app-1 uses 20 resource, and queue-a's max = 150, so it can get two 50 container allocated.
@@ -341,14 +331,14 @@ partitions:
 	ms.mockRM.waitForAllocations(t, 4, 1000)
 
 	// Check pending resource, should be 200 now.
-	waitForPendingQueueResource(t, schedulerQueueA, 200, 1000)
-	waitForPendingQueueResource(t, schedulerQueueRoot, 200, 1000)
+	waitForPendingQueueResource(t, leaf, 200, 1000)
+	waitForPendingQueueResource(t, root, 200, 1000)
 	waitForPendingAppResource(t, schedulingApp, 200, 1000)
 
 	// Check allocated resources of queues, apps
-	assert.Assert(t, schedulerQueueA.QueueInfo.GetAllocatedResource().Resources[resources.MEMORY] == 120)
-	assert.Assert(t, schedulerQueueRoot.QueueInfo.GetAllocatedResource().Resources[resources.MEMORY] == 120)
-	assert.Assert(t, schedulingApp.ApplicationInfo.GetAllocatedResource().Resources[resources.MEMORY] == 120)
+	assert.Assert(t, leaf.QueueInfo.GetAllocatedResource().Resources[resources.MEMORY] == 120, "leaf allocated memory incorrect")
+	assert.Assert(t, root.QueueInfo.GetAllocatedResource().Resources[resources.MEMORY] == 120, "root allocated memory incorrect")
+	assert.Assert(t, schedulingApp.ApplicationInfo.GetAllocatedResource().Resources[resources.MEMORY] == 120, "app allocated memory incorrect")
 
 	// Check allocated resources of nodes
 	waitForNodesAllocatedResource(t, ms.clusterInfo, "[rm:123]default", []string{"node-1:1234", "node-2:1234"}, 120, 1000)
@@ -371,48 +361,41 @@ partitions:
 
 	// Release Allocations.
 	err = ms.proxy.Update(updateRequest)
-
-	if err != nil {
-		t.Fatalf("UpdateRequest 4 failed: %v", err)
-	}
+	assert.NilError(t, err, "UpdateRequest 4 failed")
 
 	ms.mockRM.waitForAllocations(t, 0, 1000)
 
 	// Check pending resource, should be 200 (same)
-	waitForPendingQueueResource(t, schedulerQueueA, 200, 1000)
-	waitForPendingQueueResource(t, schedulerQueueRoot, 200, 1000)
+	waitForPendingQueueResource(t, leaf, 200, 1000)
+	waitForPendingQueueResource(t, root, 200, 1000)
 	waitForPendingAppResource(t, schedulingApp, 200, 1000)
 
 	// Check allocated resources of queues, apps should be 0 now
-	assert.Assert(t, schedulerQueueA.QueueInfo.GetAllocatedResource().Resources[resources.MEMORY] == 0)
-	assert.Assert(t, schedulerQueueRoot.QueueInfo.GetAllocatedResource().Resources[resources.MEMORY] == 0)
-	assert.Assert(t, schedulingApp.ApplicationInfo.GetAllocatedResource().Resources[resources.MEMORY] == 0)
+	assert.Assert(t, leaf.QueueInfo.GetAllocatedResource().Resources[resources.MEMORY] == 0, "leaf allocated memory incorrect")
+	assert.Assert(t, root.QueueInfo.GetAllocatedResource().Resources[resources.MEMORY] == 0, "root allocated memory incorrect")
+	assert.Assert(t, schedulingApp.ApplicationInfo.GetAllocatedResource().Resources[resources.MEMORY] == 0, "app allocated memory incorrect")
 
 	// Release asks
 	err = ms.proxy.Update(&si.UpdateRequest{
 		Releases: &si.AllocationReleasesRequest{
 			AllocationAsksToRelease: []*si.AllocationAskReleaseRequest{
 				{
-					ApplicationID: "app-1",
+					ApplicationID: appID,
 					PartitionName: "default",
 				},
 			},
 		},
 		RmID: "rm:123",
 	})
-	if err != nil {
-		t.Fatalf("UpdateRequest 5 failed: %v", err)
-	}
+	assert.NilError(t, err, "UpdateRequest 5 failed")
 
 	// Release Allocations.
 	err = ms.proxy.Update(updateRequest)
-	if err != nil {
-		t.Fatalf("UpdateRequest 6 failed: %v", err)
-	}
+	assert.NilError(t, err, "UpdateRequest 6 failed")
 
 	// Check pending resource
-	waitForPendingQueueResource(t, schedulerQueueA, 0, 1000)
-	waitForPendingQueueResource(t, schedulerQueueRoot, 0, 1000)
+	waitForPendingQueueResource(t, leaf, 0, 1000)
+	waitForPendingQueueResource(t, root, 0, 1000)
 	waitForPendingAppResource(t, schedulingApp, 0, 1000)
 }
 
