@@ -240,13 +240,13 @@ func (sn *SchedulingNode) preAllocateCheck(res *resources.Resource, resKey strin
 	// check if resources are available
 	available := sn.nodeInfo.GetAvailableResource()
 	if preemptionPhase {
-		available.AddTo(sn.preempting)
+		available.AddTo(sn.getPreemptingResource())
 	}
 	// remove the unconfirmed resources
 	available.SubFrom(sn.getAllocatingResource())
 	// check the request fits in what we have calculated
 	if !resources.FitIn(available, res) {
-		log.Logger().Debug("requested resource plus unconfirmed is larger than available node resources",
+		log.Logger().Debug("requested resource is larger than currently available node resources",
 			zap.String("nodeID", sn.NodeID),
 			zap.Any("requested", res),
 			zap.Any("available", available))
