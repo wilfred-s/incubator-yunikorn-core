@@ -242,13 +242,15 @@ func (sn *SchedulingNode) preAllocateCheck(res *resources.Resource, resKey strin
 	if preemptionPhase {
 		available.AddTo(sn.preempting)
 	}
-	newAllocating := resources.Add(res, sn.getAllocatingResource())
-	if !resources.FitIn(available, newAllocating) {
-		log.Logger().Debug("requested resource is larger than available node resources",
+	// remove the unconfirmed resources
+	available.SubFrom(sn.getAllocatingResource())
+	// check the request fits in what we have calculated
+	if !resources.FitIn(available, res) {
+		log.Logger().Debug("requested resource plus unconfirmed is larger than available node resources",
 			zap.String("nodeID", sn.NodeID),
-			zap.Any("available", available),
-			zap.Any("allocating", newAllocating))
-		return fmt.Errorf("pre alloc check: requested resource %s is larger than resource available on %s, %s", newAllocating.String(), sn.NodeID, available.String())
+			zap.Any("requested", res),
+			zap.Any("available", available))
+		return fmt.Errorf("pre alloc check: requested resource %s is larger than currently available %s resource on %s", res.String(), available.String(), sn.NodeID)
 	}
 	// can allocate, based on resource size
 	return nil

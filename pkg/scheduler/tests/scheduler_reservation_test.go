@@ -218,7 +218,7 @@ func TestReservationForTwoQueues(t *testing.T) {
 	ms.mockRM.waitForAcceptedApplication(t, app2ID, 1000)
 	app2 := ms.getSchedulingApplication(app2ID)
 
-	// add the second scheduling app
+	// add the third scheduling app
 	app3ID := "app-3"
 	err = ms.addApp(app3ID, leaf2name, "default")
 	if err != nil {
