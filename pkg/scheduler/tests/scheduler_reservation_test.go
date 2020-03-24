@@ -129,8 +129,8 @@ func TestBasicReservation(t *testing.T) {
 
 	// check objects have reservations assigned,
 	assert.Equal(t, 2, len(app.GetReservations()), "reservations missing from app")
-	assert.Equal(t, 1, len(ms.getSchedulingNode("node-1").GetReservations()), "reservation missing on node-1")
-	assert.Equal(t, 1, len(ms.getSchedulingNode("node-2").GetReservations()), "reservation missing on node-2")
+	assert.Equal(t, 1, len(ms.getSchedulingNode(nodes[0]).GetReservations()), "reservation missing on %s", nodes[0])
+	assert.Equal(t, 1, len(ms.getSchedulingNode(nodes[1]).GetReservations()), "reservation missing on %s", nodes[1])
 	assert.Equal(t, 2, ms.getPartitionReservations()[appID], "reservations missing from partition")
 
 	// Remove app-1
@@ -141,15 +141,15 @@ func TestBasicReservation(t *testing.T) {
 	waitForAllocatedQueueResource(t, leafQueue, 0, 1000)
 	mem = int(app.GetAllocatedResource().Resources[resources.MEMORY])
 	assert.Equal(t, 0, mem, "allocated app resource not correct after app removal")
-	mem = int(ms.getSchedulingNode("node-1").GetAllocatedResource().Resources[resources.MEMORY])
+	mem = int(ms.getSchedulingNode(nodes[0]).GetAllocatedResource().Resources[resources.MEMORY])
 	assert.Equal(t, 0, mem, "allocated node-1 resource not correct after app removal")
-	mem = int(ms.getSchedulingNode("node-2").GetAllocatedResource().Resources[resources.MEMORY])
+	mem = int(ms.getSchedulingNode(nodes[1]).GetAllocatedResource().Resources[resources.MEMORY])
 	assert.Equal(t, 0, mem, "allocated node-2 resource not correct after app removal")
 
 	// App/node should not have reservation now
 	assert.Equal(t, 0, len(app.GetReservations()), "reservations missing from app")
-	assert.Equal(t, 0, len(ms.getSchedulingNode("node-1").GetReservations()), "reservation missing on node-1")
-	assert.Equal(t, 0, len(ms.getSchedulingNode("node-2").GetReservations()), "reservation missing on node-2")
+	assert.Equal(t, 0, len(ms.getSchedulingNode(nodes[0]).GetReservations()), "reservation missing on %s", nodes[0])
+	assert.Equal(t, 0, len(ms.getSchedulingNode(nodes[1]).GetReservations()), "reservation missing on %s", nodes[1])
 	assert.Equal(t, 0, ms.getPartitionReservations()[appID], "reservations missing from partition")
 }
 
