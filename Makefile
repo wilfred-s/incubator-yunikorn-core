@@ -52,7 +52,7 @@ lint:
 		fi \
 	fi ; \
 	headSHA=$$(git rev-parse --short=12 HEAD) ; \
-	$${lintBin} run --new-from-rev=$${{headSHA}}
+	$${lintBin} run --new-from-rev=$${headSHA}
 
 .PHONY: common-check-license
 common-check-license:
